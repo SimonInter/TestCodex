@@ -58,22 +58,30 @@ export async function POST(request: Request) {
 
       for (const option of product.options) {
         const selection = item.customization?.find((choice) => choice.optionId === option.id);
+
         if (!selection) {
+          if (option.required) {
+            throw new Error(`Missing required option ${option.id}`);
+          }
           continue;
         }
+
+        const getConfigPriceImpact = () => {
+          const config = option.config as { priceImpact?: unknown } | null;
+          return typeof config?.priceImpact === "number" ? config.priceImpact : 0;
+        };
 
         if (option.type === "boolean") {
           if (typeof selection.value !== "boolean") {
             throw new Error(`Invalid value type for option ${option.id}`);
           }
           if (selection.value === true) {
-            const config = option.config as { priceImpact?: unknown } | null;
-            const priceImpact = typeof config?.priceImpact === "number" ? config.priceImpact : 0;
-            unitPrice += priceImpact;
+            unitPrice += getConfigPriceImpact();
           }
+          continue;
         }
 
-        if (option.type === "select") {
+        if (option.type === "select" || option.type === "color") {
           if (typeof selection.value !== "string") {
             throw new Error(`Invalid value type for option ${option.id}`);
           }
@@ -82,6 +90,28 @@ export async function POST(request: Request) {
             throw new Error(`Invalid option value ${selection.value} for option ${option.id}`);
           }
           unitPrice += selectedValue.priceImpact;
+          continue;
+        }
+
+        if (option.type === "text") {
+          if (typeof selection.value !== "string") {
+            throw new Error(`Invalid value type for option ${option.id}`);
+          }
+          unitPrice += getConfigPriceImpact();
+          continue;
+        }
+
+        if (option.type === "file") {
+          if (
+            typeof selection.value !== "object" ||
+            selection.value === null ||
+            typeof (selection.value as { url?: unknown }).url !== "string" ||
+            typeof (selection.value as { name?: unknown }).name !== "string"
+          ) {
+            throw new Error(`Invalid value type for option ${option.id}`);
+          }
+          unitPrice += getConfigPriceImpact();
+          continue;
         }
       }
 
